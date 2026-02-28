@@ -14,7 +14,7 @@
 ### 编译步骤
 
 ```bash
-git clone https://git.woa.com/shikiliu/ess_mcp_server
+git clone https://github.com/tencentess/ess_mcp_server
 cd ess_mcp_server
 go mod tidy
 go build
