@@ -1,0 +1,105 @@
+server:
+  # MCP Server 监听端口
+  port: "8080"
+  # MCP Server 名称
+  name: "腾讯电子签 ESS MCP Server"
+  # MCP Server 版本
+  version: "1.0.0"
+  # 是否开启 debug 模式（开启后会打印请求参数、响应内容等详细日志）
+  debug: true
+
+# 各种描述的截断限制，如果太低影响接口选择的准确度和每次对话的token消耗，如果太高模型会直接报 mcp client  too large
+schema:
+  # 工具列表中精简描述的最大长度
+  desc_max_len_short: 300
+  # 接口详情描述的最大长度，读取接口具体功能的时候会使用这个字段
+  desc_max_len_long: 400
+  # 每个参数描述的最大长度
+  desc_max_len_medium: 150
+  # 参数详细说明最大递归深度 ，如果太深也会导致模型mcp client too large报错
+  schema_max_detail_depth: 4
+
+# 默认凭证配置（可以通过 mcp client HTTP Headers 中传递的覆盖）
+credentials:
+  # 腾讯云 SecretId
+  secret_id: "你自己的腾讯云 SecretId"
+  # 腾讯云 SecretKey
+  secret_key: "你自己的腾讯云 SecretKey"
+  # 环境（可选值: test / online）
+  env: "test"
+
+# 对应的API相关配置
+api:
+  # 腾讯云 API 服务名
+  service: "ess"
+  # 腾讯云 API 版本号
+  api_version: "2020-11-11"
+  # Endpoint 配置
+  endpoints:
+    test:
+      default: "ess.test.ess.tencent.cn"
+      # 特殊接口的 Endpoint 映射
+      custom:
+        UploadFiles: "file.test.ess.tencent.cn"
+    online:
+      default: "ess.tencentcloudapi.com"
+      custom:
+        UploadFiles: "file.ess.tencent.cn"
+
+  # 需要加载的 API接口 ，请按自己的需要配置需要的API， API太多不仅导致token消耗过快，而且会导致mcp client too large
+  loading_apis:
+    - DescribeFlowTemplates
+    - DescribeUserFlowType
+    - OperateTemplate
+    - UploadFiles
+    - CreateConvertTaskApi
+    - GetTaskResultApi
+    - DescribeFileUrls
+    - CreateFlowByFiles
+    - CreateFlow
+    - CreateDocument
+    - StartFlow
+    - CreateFlowGroupByTemplates
+    - CreateFlowGroupByFiles
+    - CreateMultiFlowSignQRCode
+    - CreateSchemeUrl
+    - CreateBatchSignUrl
+    - CreateFlowSignUrl
+    - CreateBatchQuickSignUrl
+    - DescribeFlowInfo
+    - DescribeFlowComponents
+    - CreateFlowGroupSignReview
+    - CreateFlowSignReview
+    - ModifyFlowDeadline
+    - CreateFlowReminds
+    - CreateReleaseFlow
+    - CancelFlow
+    - CancelMultiFlowSignQRCode
+    - CreateWebThemeConfig
+    - CreatePrepareFlow
+    - CreateOrganizationBatchSignUrl
+    - CreateEmbedWebUrl
+    - CreatePrepareFlowGroup
+    - DescribeOrganizationSeals
+    - CreateSealPolicy
+    - DeleteSealPolicies
+    - CreateSeal
+    - OperateSeals
+    - VerifyPdf
+    - CreateFlowEvidenceReport
+    - DescribeFlowEvidenceReport
+    - DescribeIntegrationDepartments
+    - CreateIntegrationDepartment
+    - ModifyIntegrationDepartment
+    - DeleteIntegrationDepartment
+    - ModifyApplicationCallbackInfo
+    - DescribeExtendedServiceAuthInfos
+    - ModifyExtendedService
+    - CreateOrganizationInfoChangeUrl
+    - DescribeIntegrationEmployees
+    - CreateIntegrationEmployees
+    - UpdateIntegrationEmployees
+    - DescribeIntegrationRoles
+    - CreateIntegrationUserRoles
+    - DeleteIntegrationRoleUsers
+    - DescribeBillUsage

@@ -1,0 +1,5 @@
+/*.exe
+/.idea
+vendor
+*.log
+ess_mcp_server
