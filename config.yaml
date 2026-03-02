@@ -13,9 +13,9 @@ schema:
   # 工具列表中精简描述的最大长度
   desc_max_len_short: 300
   # 接口详情描述的最大长度，读取接口具体功能的时候会使用这个字段
-  desc_max_len_long: 400
+  desc_max_len_long: 1000
   # 每个参数描述的最大长度
-  desc_max_len_medium: 150
+  desc_max_len_medium: 1000
   # 参数详细说明最大递归深度 ，如果太深也会导致模型mcp client too large报错
   schema_max_detail_depth: 4
 
