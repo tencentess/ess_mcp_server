@@ -54,18 +54,13 @@ func customizeUploadFileItems(items *parser.ParamDef) *parser.ParamDef {
 		// 移除 FileBody，替换为 FileUrl 和 FilePath
 		if prop.Name == "FileBody" {
 			newProps = append(newProps, parser.ParamDef{
-				Name:        "FileUrl",
-				Type:        "string",
-				Description: "文件下载URL地址。提供此参数后，MCP Server 会自动下载文件并转换为 Base64 上传。与 FilePath 二选一，优先使用 FileUrl。",
-				Required:    false,
-				Example:     "https://example.com/contract.pdf",
-			})
-			newProps = append(newProps, parser.ParamDef{
-				Name:        "FilePath",
-				Type:        "string",
-				Description: "本地文件路径。提供此参数后，MCP Server 会自动读取文件并转换为 Base64 上传。支持的文件类型: .pdf/.doc/.docx/.jpg/.png/.xls/.xlsx/.html。与 FileUrl 二选一。",
-				Required:    false,
-				Example:     "C:/Documents/contract.pdf",
+				Name: "FileUrl",
+				Type: "string",
+				Description: "文件下载URL地址（需要提供MCP Server 部署机子可以访问的链接）。" +
+					"测试可用：https://qcloudimg.tencent-cloud.cn/raw/4221137b4fad7ac4b60f8ab96961b81a.pdf ",
+				Required:     false,
+				Example:      "https://qcloudimg.tencent-cloud.cn/raw/4221137b4fad7ac4b60f8ab96961b81a.pdf",
+				SkipTruncate: true,
 			})
 			continue
 		}

@@ -74,6 +74,12 @@ func (s *MCPServer) buildFullSchemaInfo(action parser.APIAction) string {
 
 	sb.WriteString(fmt.Sprintf("# 接口: %s\n\n", action.Name))
 
+	// 输出接口详细描述（使用 DescMaxLenLong 控制长度）
+	if action.Description != "" {
+		desc := truncateDesc(action.Description, s.cfg.Schema.DescMaxLenLong)
+		sb.WriteString(fmt.Sprintf("## 接口说明\n%s\n\n", desc))
+	}
+
 	activeParams := filterActiveParams(action.RequestParams)
 
 	// 如果存在定制化处理器，对参数定义进行定制
@@ -254,8 +260,11 @@ func writeParamDetails(sb *strings.Builder, params []parser.ParamDef, prefix str
 			requiredTag = " **[必填]**"
 		}
 
-		// 截断过长描述
-		desc := truncateDesc(param.Description, descMaxLenMedium, true)
+		// 截断过长描述（custom 定制的字段跳过截断）
+		desc := param.Description
+		if !param.SkipTruncate {
+			desc = truncateDesc(desc, descMaxLenMedium)
+		}
 		sb.WriteString(fmt.Sprintf("- `%s` (%s)%s: %s\n", fullName, param.Type, requiredTag, desc))
 
 		// 超过最大深度时，不再递归展开子参数，仅提示存在嵌套
@@ -311,7 +320,11 @@ func buildFullJSONSchema(params []parser.ParamDef, descMaxLenMedium int) json.Ra
 // paramToFullSchema 将参数定义转为完整的 JSON Schema（最大嵌套深度3层，控制体积）
 func paramToFullSchema(param parser.ParamDef, depth int, descMaxLenMedium int) map[string]interface{} {
 	if depth > 3 {
-		return map[string]interface{}{"type": "object", "description": truncateDesc(param.Description, descMaxLenMedium, true)}
+		desc := param.Description
+		if !param.SkipTruncate {
+			desc = truncateDesc(desc, descMaxLenMedium)
+		}
+		return map[string]interface{}{"type": "object", "description": desc}
 	}
 
 	// 跳过已弃用的参数（返回空标记）
@@ -320,7 +333,11 @@ func paramToFullSchema(param parser.ParamDef, depth int, descMaxLenMedium int) m
 	}
 
 	schema := make(map[string]interface{})
-	schema["description"] = truncateDesc(param.Description, descMaxLenMedium, true)
+	if param.SkipTruncate {
+		schema["description"] = param.Description
+	} else {
+		schema["description"] = truncateDesc(param.Description, descMaxLenMedium)
+	}
 
 	switch param.Type {
 	case "string":

@@ -43,7 +43,7 @@ func buildLightweightDescription(action parser.APIAction, descMaxLenShort int) s
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("[%s]", action.ActionName))
 	if action.Description != "" {
-		desc := truncateDesc(action.Description, descMaxLenShort, false)
+		desc := truncateDesc(action.Description, descMaxLenShort)
 		sb.WriteString(" ")
 		sb.WriteString(desc)
 	}

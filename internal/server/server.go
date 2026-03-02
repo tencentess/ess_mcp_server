@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"strings"
 
 	"ess_mcp_server/internal/config"
 	"ess_mcp_server/internal/parser"
@@ -73,13 +72,7 @@ func NewMCPServer(spec *parser.SwaggerSpec, cfg *config.Config) (*MCPServer, err
 }
 
 // truncateDesc 截断过长的描述信息（基于 rune，安全处理 UTF-8 多字节字符）
-// firstLineOnly 为 true 时，先按换行或句号取第一段再截断
-func truncateDesc(desc string, maxLen int, firstLineOnly bool) string {
-	if firstLineOnly {
-		if idx := strings.IndexAny(desc, "\n。"); idx > 0 {
-			desc = desc[:idx]
-		}
-	}
+func truncateDesc(desc string, maxLen int) string {
 	if runes := []rune(desc); len(runes) > maxLen {
 		desc = string(runes[:maxLen]) + "..."
 	}

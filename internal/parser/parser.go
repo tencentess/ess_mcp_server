@@ -35,15 +35,16 @@ type APIAction struct {
 
 // ParamDef 参数定义
 type ParamDef struct {
-	Name        string
-	Type        string     // string, integer, boolean, array, object
-	Description string
-	Required    bool
-	Disabled    bool       // 是否已弃用
-	Example     string
-	Items       *ParamDef  // 当 Type 为 array 时，元素类型定义
-	Properties  []ParamDef // 当 Type 为 object（$ref 解析后）时，子属性
-	RefName     string     // 引用的定义名
+	Name          string
+	Type          string     // string, integer, boolean, array, object
+	Description   string
+	Required      bool
+	Disabled      bool       // 是否已弃用
+	Example       string
+	Items         *ParamDef  // 当 Type 为 array 时，元素类型定义
+	Properties    []ParamDef // 当 Type 为 object（$ref 解析后）时，子属性
+	RefName       string     // 引用的定义名
+	SkipTruncate  bool       // 是否跳过描述截断（custom 定制的字段设为 true）
 }
 
 // rawSwagger 用于 YAML 解析的原始结构
