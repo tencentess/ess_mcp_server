@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"ess_mcp_server/internal/config"
 	"ess_mcp_server/internal/parser"
+	"ess_mcp_server/internal/server/custom"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -16,6 +19,7 @@ const (
 	headerSecretId  = "X-Secret-Id"
 	headerSecretKey = "X-Secret-Key"
 	headerEnv       = "X-Env"
+	headerUserId    = "X-User-Id"
 )
 
 // context key 类型，用于在 context 中存储凭证信息
@@ -25,14 +29,16 @@ const (
 	ctxSecretId  ctxKey = "secretId"
 	ctxSecretKey ctxKey = "secretKey"
 	ctxEnv       ctxKey = "env"
+	ctxUserId    ctxKey = "userId"
 )
 
 // MCPServer 封装 MCP 服务
 type MCPServer struct {
-	server    *mcpserver.MCPServer
-	spec      *parser.SwaggerSpec
-	cfg       *config.Config
-	actionMap map[string]parser.APIAction // 接口名 -> APIAction 的映射，用于O(1)查找
+	server     *mcpserver.MCPServer
+	spec       *parser.SwaggerSpec
+	cfg        *config.Config
+	actionMap  map[string]parser.APIAction // 接口名 -> APIAction 的映射，用于O(1)查找
+	fileServer *FileServer                 // 文件上传服务
 }
 
 // NewMCPServer 创建 MCP Server，采用按需加载架构：
@@ -47,10 +53,11 @@ func NewMCPServer(spec *parser.SwaggerSpec, cfg *config.Config) (*MCPServer, err
 	)
 
 	srv := &MCPServer{
-		server:    s,
-		spec:      spec,
-		cfg:       cfg,
-		actionMap: make(map[string]parser.APIAction),
+		server:     s,
+		spec:       spec,
+		cfg:        cfg,
+		actionMap:  make(map[string]parser.APIAction),
+		fileServer: NewFileServer(),
 	}
 
 	// 构建 actionMap 并为每个 API 接口注册精简 tool
@@ -104,11 +111,18 @@ func extractCredentials(ctx context.Context, r *http.Request) context.Context {
 	if v := r.Header.Get(headerEnv); v != "" {
 		ctx = context.WithValue(ctx, ctxEnv, v)
 	}
+	if v := r.Header.Get(headerUserId); v != "" {
+		ctx = context.WithValue(ctx, ctxUserId, v)
+	}
 	return ctx
 }
 
 // Start 启动 MCP Server（Streamable HTTP 模式）
 func (s *MCPServer) Start(ctx context.Context, addr string) error {
+	// 初始化全局文件存储，通过 server_ip + port 组合生成对外基础 URL
+	serverBaseUrl := fmt.Sprintf("http://%s:%s", s.cfg.Server.ServerIp, s.cfg.Server.Port)
+	custom.InitFileStore(serverBaseUrl)
+
 	streamableServer := mcpserver.NewStreamableHTTPServer(s.server,
 		mcpserver.WithHTTPContextFunc(extractCredentials),
 	)
@@ -116,11 +130,37 @@ func (s *MCPServer) Start(ctx context.Context, addr string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", streamableServer)
 
+	// 注册文件上传端点
+	mux.HandleFunc("/upload", s.fileServer.HandleUpload)
+
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
 
-	log.Printf("MCP Server 启动于 %s (Streamable HTTP: /mcp)", addr)
-	return srv.ListenAndServe()
+	// 用 Go 协程启动文件服务的日志提示
+	log.Printf("MCP Server 启动于 %s (Streamable HTTP: /mcp, 文件上传: /upload)", addr)
+
+	// 在独立协程中启动 HTTP 服务
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("[FileServer] 文件上传服务已在协程中启动，监听地址: %s/upload", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("[FileServer] 文件服务启动失败: %v", err)
+			errCh <- err
+		}
+	}()
+
+	// 短暂等待，检查是否立即启动失败
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("HTTP 服务启动失败: %w", err)
+	case <-time.After(100 * time.Millisecond):
+		// 启动成功，阻塞等待 context 取消
+	}
+
+	// 阻塞直到 context 被取消
+	<-ctx.Done()
+	log.Printf("MCP Server 正在关闭...")
+	return srv.Close()
 }

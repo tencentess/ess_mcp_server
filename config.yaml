@@ -1,4 +1,7 @@
 server:
+  # MCP Server 对外可访问的 IP 或域名（不含协议和端口），主要用户文件上传服务
+  # 如果不配置，默认为 localhost
+  server_ip: "localhost"
   # MCP Server 监听端口
   port: "8080"
   # MCP Server 名称
@@ -22,11 +25,14 @@ schema:
 # 默认凭证配置（可以通过 mcp client HTTP Headers 中传递的覆盖）
 credentials:
   # 腾讯云 SecretId
-  secret_id: "你自己的腾讯云 SecretId"
+  secret_id: "你自己在的腾讯云 SecretId"
   # 腾讯云 SecretKey
-  secret_key: "你自己的腾讯云 SecretKey"
+  secret_key: "你自己在的腾讯云 SecretKey"
   # 环境（可选值: test / online）
   env: "test"
+  # 默认操作人 UserId（可以通过 HTTP Header X-User-Id 覆盖）
+  # 如果配置了此项，API 调用时会自动注入到 Operator.UserId 中（不覆盖用户显式传递的值）
+  user_id: ""
 
 # 对应的API相关配置
 api:

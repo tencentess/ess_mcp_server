@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -94,6 +95,7 @@ func (s *MCPServer) executeAPICall(ctx context.Context, action parser.APIAction,
 	secretId, _ := ctx.Value(ctxSecretId).(string)
 	secretKey, _ := ctx.Value(ctxSecretKey).(string)
 	env, _ := ctx.Value(ctxEnv).(string)
+	userId, _ := ctx.Value(ctxUserId).(string)
 
 	// 如果 HTTP Headers 没有传递凭证，则从 config.yaml 的默认配置中读取
 	if secretId == "" && secretKey == "" && env == "" {
@@ -101,6 +103,17 @@ func (s *MCPServer) executeAPICall(ctx context.Context, action parser.APIAction,
 		secretKey = s.cfg.Credentials.SecretKey
 		env = s.cfg.Credentials.Env
 		config.Log(ctx, "HTTP Headers 未传递凭证，使用 config.yaml 中的默认配置")
+	}
+
+	// 如果 HTTP Headers 未传递 UserId，则从 config.yaml 的默认配置中读取
+	if userId == "" {
+		userId = s.cfg.Credentials.UserId
+	}
+
+	// 如果有 UserId，自动注入到 Operator.UserId（不覆盖用户已显式传递的值）
+	if userId != "" {
+		injectOperatorUserId(params, userId)
+		config.Log(ctx, "自动注入 Operator.UserId: %s", userId)
 	}
 
 	if secretId == "" || secretKey == "" {
@@ -184,6 +197,44 @@ func (s *MCPServer) executeAPICall(ctx context.Context, action parser.APIAction,
 		}
 	}
 
+	// API 调用成功，执行后处理（如清理临时文件）
+	if c := custom.Get(action.Name); c != nil {
+		if err := c.PostprocessParams(params); err != nil {
+			log.Printf("[警告] 接口 %s 后处理失败: %v", action.Name, err)
+		}
+	}
+
 	config.Log(ctx, "[响应->客户端] call_ess_action(%s) 返回成功, 长度: %d 字节\n%s", action.Name, len(prettyJSON), string(prettyJSON))
 	return mcp.NewToolResultText(string(prettyJSON)), nil
+}
+
+// injectOperatorUserId 自动注入操作人 UserId 到请求参数中
+// 大多数接口使用 Operator.UserId，但 UploadFiles 等接口使用 Caller.OperatorId
+// 如果 params 中已存在对应字段且非空，则不覆盖（用户显式传递优先）
+func injectOperatorUserId(params map[string]interface{}, userId string) {
+	// 如果 params 中已有 Operator，则注入 UserId
+	if _, ok := params["Operator"]; ok {
+		injectNestedField(params, "Operator", "UserId", userId)
+	}
+
+	// 如果 params 中已有 Caller，则注入 OperatorId（UploadFiles 等接口使用此字段）
+	if _, ok := params["Caller"]; ok {
+		injectNestedField(params, "Caller", "OperatorId", userId)
+	}
+}
+
+// injectNestedField 向 params[parentKey][childKey] 注入值
+// 如果 parentKey 不存在则创建，如果 childKey 已有非空值则不覆盖
+func injectNestedField(params map[string]interface{}, parentKey, childKey, value string) {
+	parent, ok := params[parentKey].(map[string]interface{})
+	if !ok {
+		// 父节点不存在或类型不对，创建新的
+		parent = make(map[string]interface{})
+		params[parentKey] = parent
+	}
+
+	// 仅在目标字段为空时注入
+	if existing, ok := parent[childKey].(string); !ok || existing == "" {
+		parent[childKey] = value
+	}
 }

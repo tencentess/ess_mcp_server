@@ -19,6 +19,11 @@ type ActionCustomizer interface {
 	// 例如：将 url 下载为文件并转为 base64，或将本地路径读取并转为 base64
 	// 返回处理后的参数和可能的错误
 	PreprocessParams(params map[string]interface{}) (map[string]interface{}, error)
+
+	// PostprocessParams 在 API 调用成功后进行后处理
+	// 例如：清理临时文件等资源
+	// 返回可能的错误（调用方仅记录警告日志，不影响 API 返回）
+	PostprocessParams(params map[string]interface{}) error
 }
 
 // 全局定制化处理器注册表

@@ -5,38 +5,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"ess_mcp_server/internal/config"
 	"ess_mcp_server/internal/parser"
 )
 
-// 允许上传的文件扩展名白名单
-var allowedFileExtensions = map[string]bool{
-	".pdf":  true,
-	".doc":  true,
-	".docx": true,
-	".jpg":  true,
-	".jpeg": true,
-	".png":  true,
-	".xls":  true,
-	".xlsx": true,
-	".html": true,
-}
-
 // UploadFilesCustomizer 对 UploadFiles 接口的定制化处理
-// 将 FileBody（base64）替换为 FileUrl / FilePath，MCP Server 自动完成文件读取和编码
-type UploadFilesCustomizer struct{}
+// 将 FileBody（base64）替换为 FileUrl / FileUploadId，MCP Server 自动完成文件读取和编码
+type UploadFilesCustomizer struct {
+	// usedFileIds 暂存本次请求中已使用的 FileUploadId 列表，供 PostprocessParams 清理
+	usedFileIds []string
+}
 
 func (u *UploadFilesCustomizer) ActionName() string {
 	return "UploadFiles"
 }
 
 // CustomizeSchema 修改 UploadFiles 的 Schema：
-// 将 FileInfos[].FileBody 移除，替换为 FileUrl 和 FilePath 两个字段
+// 将 FileInfos[].FileBody 移除，替换为 FileUrl 和 FileUploadId 两个字段
 func (u *UploadFilesCustomizer) CustomizeSchema(params []parser.ParamDef) []parser.ParamDef {
 	for i, p := range params {
 		if p.Name == "FileInfos" && p.Items != nil {
@@ -51,15 +38,25 @@ func customizeUploadFileItems(items *parser.ParamDef) *parser.ParamDef {
 	newProps := make([]parser.ParamDef, 0, len(items.Properties)+2)
 
 	for _, prop := range items.Properties {
-		// 移除 FileBody，替换为 FileUrl 和 FilePath
+		// 移除 FileBody，替换为 FileUrl 和 FileUploadId
 		if prop.Name == "FileBody" {
 			newProps = append(newProps, parser.ParamDef{
 				Name: "FileUrl",
 				Type: "string",
-				Description: "文件下载URL地址（需要提供MCP Server 部署机子可以访问的链接）。" +
+				Description: "文件下载URL地址，与FileUploadId二选一，如果同时提供则优先使用FileUploadId。" +
 					"测试可用：https://qcloudimg.tencent-cloud.cn/raw/4221137b4fad7ac4b60f8ab96961b81a.pdf ",
 				Required:     false,
 				Example:      "https://qcloudimg.tencent-cloud.cn/raw/4221137b4fad7ac4b60f8ab96961b81a.pdf",
+				SkipTruncate: true,
+			})
+			newProps = append(newProps, parser.ParamDef{
+				Name: "FileUploadId",
+				Type: "string",
+				Description: fmt.Sprintf(
+					"通过 POST /upload 端点上传文件后返回的 fileId，与FileUrl二选一，如果同时提供则优先使用FileUploadId。"+
+						"使用方法：先通过 POST %s/upload 上传本地文件（multipart/form-data，字段名: file），然后将返回的 fileId 填入此参数。",
+					GetBaseUrl()),
+				Required:     false,
 				SkipTruncate: true,
 			})
 			continue
@@ -72,8 +69,11 @@ func customizeUploadFileItems(items *parser.ParamDef) *parser.ParamDef {
 }
 
 // PreprocessParams 在调用 UploadFiles API 前预处理参数：
-// 将 FileUrl/FilePath 转换为 FileBody（base64）
+// 将 FileUrl/FileUploadId 转换为 FileBody（base64）
 func (u *UploadFilesCustomizer) PreprocessParams(params map[string]interface{}) (map[string]interface{}, error) {
+	// 重置已使用的 fileId 列表
+	u.usedFileIds = nil
+
 	fileInfos, ok := params["FileInfos"]
 	if !ok {
 		return params, nil
@@ -91,38 +91,35 @@ func (u *UploadFilesCustomizer) PreprocessParams(params map[string]interface{}) 
 		}
 
 		var fileBytes []byte
-		var fromUrl bool
-		var err error
 
-		// 优先处理 FileUrl
-		if fileUrl, ok := fileInfo["FileUrl"].(string); ok && fileUrl != "" {
-			fileBytes, err = downloadFile(fileUrl)
+		// 优先处理 FileUploadId，如果同时提供了 FileUploadId 和 FileUrl，则使用 FileUploadId
+		if fileUploadId, ok := fileInfo["FileUploadId"].(string); ok && fileUploadId != "" {
+			// 通过全局 FileStore 获取已上传的文件内容
+			data, fileName, err := GetFileBytes(fileUploadId)
+			if err != nil {
+				return nil, fmt.Errorf("FileInfos[%d]: 通过 FileUploadId 获取文件失败: %w", i, err)
+			}
+			fileBytes = data
+			// 记录已使用的 fileId，供后续清理
+			u.usedFileIds = append(u.usedFileIds, fileUploadId)
+			// 移除自定义字段
+			delete(fileInfo, "FileUploadId")
+			delete(fileInfo, "FileUrl") // 同时移除 FileUrl（如果存在）
+			config.Debug("[UploadFiles定制] FileInfos[%d]: 通过 FileUploadId 获取文件成功，文件名: %s，大小: %d 字节", i, fileName, len(fileBytes))
+		} else if fileUrl, ok := fileInfo["FileUrl"].(string); ok && fileUrl != "" {
+			data, err := downloadFile(fileUrl)
 			if err != nil {
 				return nil, fmt.Errorf("FileInfos[%d]: 下载文件失败 (url=%s): %w", i, fileUrl, err)
 			}
-			fromUrl = true
+			fileBytes = data
 			// 移除自定义字段
 			delete(fileInfo, "FileUrl")
 			config.Debug("[UploadFiles定制] FileInfos[%d]: 从URL下载文件成功，大小: %d 字节", i, len(fileBytes))
-		} else if filePath, ok := fileInfo["FilePath"].(string); ok && filePath != "" {
-			// 处理 FilePath：先检查文件是否存在，不存在则提示用户提供 URL
-			if _, statErr := os.Stat(filePath); statErr != nil && os.IsNotExist(statErr) {
-				return nil, fmt.Errorf("FileInfos[%d]: 本地文件不存在 (path=%s)，MCP Server 无法访问该路径的文件，请提供文件的下载URL（使用 FileUrl 参数）", i, filePath)
-			}
-			fileBytes, err = readLocalFile(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("FileInfos[%d]: 读取本地文件失败 (path=%s): %w", i, filePath, err)
-			}
-			fromUrl = false
-			// 移除自定义字段
-			delete(fileInfo, "FilePath")
-			config.Debug("[UploadFiles定制] FileInfos[%d]: 读取本地文件成功，大小: %d 字节, 路径: %s", i, len(fileBytes), filePath)
 		}
 
 		// 如果成功获取到文件内容，转为 base64 赋值给 FileBody
 		if fileBytes != nil {
 			fileInfo["FileBody"] = base64.StdEncoding.EncodeToString(fileBytes)
-			config.Debug("[UploadFiles定制] FileInfos[%d]: Base64编码完成，来源: url=%v", i, fromUrl)
 		}
 
 		fileInfoArr[i] = fileInfo
@@ -130,6 +127,17 @@ func (u *UploadFilesCustomizer) PreprocessParams(params map[string]interface{}) 
 
 	params["FileInfos"] = fileInfoArr
 	return params, nil
+}
+
+// PostprocessParams 在 UploadFiles API 调用成功后清理本地临时文件
+func (u *UploadFilesCustomizer) PostprocessParams(params map[string]interface{}) error {
+	for _, fileId := range u.usedFileIds {
+		RemoveFile(fileId)
+		config.Debug("[UploadFiles定制] API 调用成功，已清理本地文件: fileId=%s", fileId)
+	}
+	// 清空已使用列表
+	u.usedFileIds = nil
+	return nil
 }
 
 // downloadFile 从 URL 下载文件内容
@@ -160,47 +168,4 @@ func downloadFile(url string) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-// readLocalFile 读取本地文件，并校验文件扩展名
-func readLocalFile(filePath string) ([]byte, error) {
-	// 校验文件扩展名
-	ext := strings.ToLower(filepath.Ext(filePath))
-	if ext == "" {
-		return nil, fmt.Errorf("文件缺少扩展名，无法判断文件类型")
-	}
-	if !allowedFileExtensions[ext] {
-		return nil, fmt.Errorf("不支持的文件类型 '%s'，支持的类型: %s", ext, getAllowedExtensions())
-	}
-
-	// 检查文件是否存在
-	info, err := os.Stat(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("文件不存在: %s", filePath)
-		}
-		return nil, fmt.Errorf("无法访问文件: %w", err)
-	}
-
-	// 限制文件大小 50MB
-	const maxFileSize = 50 * 1024 * 1024
-	if info.Size() > maxFileSize {
-		return nil, fmt.Errorf("文件大小 (%d 字节) 超过限制 (最大 %dMB)", info.Size(), maxFileSize/1024/1024)
-	}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("读取文件失败: %w", err)
-	}
-
-	return data, nil
-}
-
-// getAllowedExtensions 返回所有允许的文件扩展名（用于错误提示）
-func getAllowedExtensions() string {
-	exts := make([]string, 0, len(allowedFileExtensions))
-	for ext := range allowedFileExtensions {
-		exts = append(exts, ext)
-	}
-	return strings.Join(exts, ", ")
 }

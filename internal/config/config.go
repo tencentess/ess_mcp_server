@@ -85,6 +85,8 @@ type CredentialsConfig struct {
 	SecretKey string `yaml:"secret_key"`
 	// 环境（可选值: test / online）
 	Env string `yaml:"env"`
+	// 默认操作人 UserId（当 HTTP Headers 未传递 X-User-Id 时使用）
+	UserId string `yaml:"user_id"`
 }
 
 // Config MCP Server 完整配置
@@ -105,6 +107,9 @@ type ServerConfig struct {
 	Version string `yaml:"version"`
 	// 是否开启 debug 模式，开启后会打印请求参数、响应内容等详细日志
 	Debug bool `yaml:"debug"`
+	// MCP Server 对外可访问的 IP 或域名（不含协议和端口），用于和 Port 组合生成对外 URL
+	// 例如: localhost、192.168.1.100、myserver.example.com
+	ServerIp string `yaml:"server_ip"`
 }
 
 // APIConfig API 相关配置
@@ -172,6 +177,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Server.Version == "" {
 		c.Server.Version = "1.0.0"
+	}
+	if c.Server.ServerIp == "" {
+		c.Server.ServerIp = "localhost"
 	}
 
 	// API 默认值

@@ -3,3 +3,6 @@
 vendor
 *.log
 ess_mcp_server
+.codebuddy
+openspec
+keepalive.sh
