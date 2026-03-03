@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"ess_mcp_server/internal/config"
+	"ess_mcp_server/internal/parser"
+	"ess_mcp_server/internal/server"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
-	"ess_mcp_server/internal/config"
-	"ess_mcp_server/internal/parser"
-	"ess_mcp_server/internal/server"
 )
+
+// Version 编译时通过 -ldflags "-X main.Version=xxx" 注入
+var Version = "dev"
 
 //本机的名字
 var mainHostName string
@@ -41,6 +45,8 @@ func main() {
 		os.Exit(1)
 	}
 	execDir := filepath.Dir(execPath)
+
+	fmt.Printf("ESS MCP Server 版本: %s\n", Version)
 
 	configPath := filepath.Join(execDir, "config.yaml")
 	cfg, err := config.LoadFromFile(configPath)
