@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ess-mcp-server-config
+  namespace: ess-mcp
+  labels:
+    app: ess_mcp_server
+data:
+  config.yaml: |
+    server:
+      server_ip: "0.0.0.0"
+      port: "8080"
+      name: "腾讯电子签 ESS MCP Server"
+      version: "1.0.0"
+      debug: false
+
+    schema:
+      desc_max_len_short: 300
+      desc_max_len_long: 1000
+      desc_max_len_medium: 1000
+      schema_max_detail_depth: 4
+
+    credentials:
+      secret_id: ""
+      secret_key: ""
+      env: "online"
+      user_id: ""
+
+    api:
+      service: "ess"
+      api_version: "2020-11-11"
+      endpoints:
+        test:
+          default: "ess.test.ess.tencent.cn"
+          custom:
+            UploadFiles: "file.test.ess.tencent.cn"
+        online:
+          default: "ess.tencentcloudapi.com"
+          custom:
+            UploadFiles: "file.ess.tencent.cn"
+
+      loading_apis:
+        - DescribeFlowTemplates
+        - UploadFiles
+        - CreateFlowByFiles
+        - CreateFlow
+        - CreateDocument
+        - StartFlow
+        - DescribeFlowInfo
