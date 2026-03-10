@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ess-mcp-server
+  namespace: ess-mcp
+  labels:
+    app: ess_mcp_server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ess_mcp_server
+  template:
+    metadata:
+      labels:
+        app: ess_mcp_server
+    spec:
+      containers:
+        - name: ess-mcp-server
+          image: ess-mcp-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SECRET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ess-mcp-server-secret
+                  key: SECRET_ID
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ess-mcp-server-secret
+                  key: SECRET_KEY
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: log
+              mountPath: /app/log
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: ess-mcp-server-config
+        - name: log
+          emptyDir: {}

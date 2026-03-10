@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+log/
+Dockerfile
+.dockerignore
+k8s/
+Makefile

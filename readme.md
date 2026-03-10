@@ -119,9 +119,45 @@ api:
 
 ---
 
+## Docker 一键运行
+
+无需安装 Go 环境，只需 Docker 即可快速启动。
+
+### 1. 准备配置文件
+
+下载或编辑项目中的 `config.yaml`，填入你的腾讯云凭证和所需的 API 白名单（详见上方配置说明）。
+
+### 2. 启动服务
+
+**方式一：Docker Compose（推荐）**
+
+```bash
+# 启动
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止
+docker compose down
+```
+
+**方式二：Docker Run**
+
+```bash
+docker run -d --name ess-mcp-server \
+  -p 8080:8080 \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  ccr.ccs.tencentyun.com/pulse-line-prod/ess-mcp-server:latest
+```
+
+启动后即可通过 `http://localhost:8080/mcp` 接入 MCP Client。
+
+---
+
 ## 使用
 
-### 启动服务
+### 启动服务（源码方式）
 
 ```bash
 ./ess_mcp_server
